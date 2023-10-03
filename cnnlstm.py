@@ -4,19 +4,20 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
-import h5py
+
 
 # 讀取資料
 train_data = pd.read_parquet('train.parquet', engine='pyarrow')
-test_data = pd.read_parquet('val.parquet', engine='pyarrow')
+val_data = pd.read_parquet('val.parquet', engine='pyarrow')
+test_data= pd.read_parquet('test.parquet', engine='pyarrow')
 encoder = pd.read_parquet('encoder.parquet', engine='pyarrow')
 
 # 資料預處理
-def preprocess_data(train_data, test_data, encoder):
-    graph_encoder = {row['圖號1']: i for i, row in encoder.iterrows()}
-    graph_encoder2 = {row['圖號2']: i for i, row in encoder.iterrows()}
+def preprocess_data(train_data, val_data, test_data, encoder):
+    graph_encoder = {row['1號溝型']: i for i, row in encoder.iterrows()}
+    graph_encoder2 = {row['2號溝型']: i for i, row in encoder.iterrows()}
 
-    encoder = encoder.drop(columns=['圖號1','圖號2'])
+    encoder = encoder.drop(columns=['1號溝型','2號溝型'])
 
     # 建立類別到編碼的映射字典
     category_maps = {}
@@ -26,30 +27,36 @@ def preprocess_data(train_data, test_data, encoder):
     # 使用編碼字典對類別特徵進行編碼
     for col in category_maps:
         train_data[col] = train_data[col].map(category_maps[col])
+        val_data[col] = val_data[col].map(category_maps[col])
         test_data[col] = test_data[col].map(category_maps[col])
 
-    return train_data, test_data, graph_encoder, graph_encoder2, category_maps
+    return train_data, val_data, test_data, graph_encoder, graph_encoder2, category_maps
 
 # 呼叫資料預處理函數
-train_data, test_data, graph_encoder, graph_encoder2, category_maps = preprocess_data(train_data, test_data, encoder)
+train_data, val_data, test_data, graph_encoder, graph_encoder2, category_maps = preprocess_data(train_data, val_data, test_data, encoder)
 
 # 提取特徵和標籤
 X_train = train_data[['蓋材', '罐材', '罐型','蓋厚度', '罐厚度']]
-y_train = [train_data['圖號1'], train_data['圖號2']]
+y_train = [train_data['1號溝型'], train_data['2號溝型']]
+X_val = val_data[['蓋材', '罐材', '罐型','蓋厚度', '罐厚度']]
+y_val = [val_data['1號溝型'], val_data['2號溝型']]
 X_test = test_data[['蓋材', '罐材', '罐型','蓋厚度', '罐厚度']]
-y_test = [test_data['圖號1'], test_data['圖號2']]
+y_test = [test_data['1號溝型'], test_data['2號溝型']]
 
 
 # 圖號編碼
 y_train[0] = y_train[0].map(graph_encoder)
-y_test[0] = y_test[0].map(graph_encoder)
 y_train[1] = y_train[1].map(graph_encoder2) 
+y_val[0] = y_val[0].map(graph_encoder)
+y_val[1] = y_val[1].map(graph_encoder2)
+y_test[0] = y_test[0].map(graph_encoder)
 y_test[1] = y_test[1].map(graph_encoder2)
 
 num_classes1 = len(y_train[0].unique())
 num_classes2 = len(y_train[1].unique())
 
 X_train = X_train.values[:, np.newaxis, :]
+X_val = X_val.values[:, np.newaxis, :]
 X_test = X_test.values[:, np.newaxis, :]
 
 
@@ -98,7 +105,7 @@ history = model.fit(
   X_train, {'output1': y_train[0], 'output2': y_train[1]},
   epochs=epochs, 
   batch_size=batch_size,
-  validation_data=(X_test, {'output1': y_test[0], 'output2': y_test[1]}),
+  validation_data=(X_val, {'output1': y_val[0], 'output2': y_val[1]}),
   callbacks=[early_stopping]
 )
 
